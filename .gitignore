@@ -1,2 +1,4 @@
 data/cuad/
 data/cuad_qa.parquet
+contracts.csv
+.DS_Store
