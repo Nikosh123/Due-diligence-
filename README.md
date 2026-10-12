@@ -33,7 +33,7 @@ Resultatet vises i en tabell med fargekodet konfidens, og kan lastes ned som CSV
 ```
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt   # streamlit, anthropic, pypdf, python-docx, pandas, openpyxl
+pip install -r requirements.txt   # streamlit, anthropic, pypdf, cryptography, python-docx, pandas, openpyxl
 ```
 
 Sett API-nøkkelen enten som miljøvariabel (`ANTHROPIC_API_KEY`) eller i `.streamlit/secrets.toml`:
@@ -47,6 +47,14 @@ ANTHROPIC_API_KEY = "sk-ant-..."
 ```
 streamlit run app.py
 ```
+
+## Prøvedokumenter
+
+Mappen `eksempeldokumenter/` inneholder ti PDF-er fra det norske testsettet. Knappen «Kjør prøvedokumentene» over opplastingsfeltet klassifiserer dem uten at brukeren laster opp noe. Egne opplastede filer erstatter prøvedokumentene.
+
+## Publisering (Streamlit Community Cloud)
+
+Appen publiseres fra GitHub-repoet med `app.py` som hovedfil. API-nøkkelen legges inn under Secrets i Streamlit (`ANTHROPIC_API_KEY = "..."`) og skal ikke ligge i repoet. `.streamlit/secrets.toml` er i `.gitignore`.
 
 Ved endringer i `klassifiser.py` mens appen kjører: stopp prosessen (Ctrl+C) og start den på nytt. Streamlit kjører `app.py` på nytt automatisk ved lagring, men reimporterer ikke moduler som allerede er lastet inn i samme prosess.
 
@@ -66,6 +74,7 @@ De tre avvikene gjaldt alle dokumenter fasiten merket "Annet/usikker". Gjennomga
 - Kategoritaksonomien er bygget for M&A-/transaksjons-due diligence og dekker ikke alle dokumenttyper som kan forekomme i et datarom.
 - Skannede PDF-er over 25 sider blir kuttet før klassifisering — informasjon lenger ut i dokumentet blir ikke vurdert.
 - Ingen dokumenter lagres; alt skjer i minnet for den aktive økten.
+- Dokumentene sendes til Claude (Anthropic) via API; appen viser derfor et varsel om ikke å laste opp konfidensielle dokumenter.
 - Konfidensnivået er modellens egen vurdering ut fra instruksjonene i prompten, ikke en uavhengig eller kalibrert sannsynlighet — modellen vurderer i praksis sin egen klassifisering.
 
 ## Mappestruktur
@@ -81,4 +90,3 @@ kjor_siste_test.py   # frittstående script for å kjøre nøyaktighetsmåling m
 ## Gjenstående opprydding
 
 - `app.py.bak_*` og `klassifiser.py.bak_*` er sikkerhetskopier fra feilsøking — kan slettes.
-- Legg til `requirements.txt` hvis den ikke finnes (`pip freeze > requirements.txt`).

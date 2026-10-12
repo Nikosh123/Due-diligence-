@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import streamlit as st
 import pandas as pd
 import zipfile
@@ -7,8 +8,23 @@ import pypdf
 from pypdf.errors import DependencyError
 from docx import Document
 
-if "ANTHROPIC_API_KEY" in st.secrets:
-    os.environ["ANTHROPIC_API_KEY"] = st.secrets["ANTHROPIC_API_KEY"]
+
+
+def _hent_api_nokkel():
+    """Leser API-nøkkelen fra Streamlit secrets (Community Cloud eller
+    .streamlit/secrets.toml) eller fra miljøvariabelen ANTHROPIC_API_KEY.
+    Nøkkelen skal aldri ligge i koden eller i repoet."""
+    try:
+        if "ANTHROPIC_API_KEY" in st.secrets:
+            return st.secrets["ANTHROPIC_API_KEY"]
+    except Exception:
+        pass
+    return os.environ.get("ANTHROPIC_API_KEY")
+
+
+_api_nokkel = _hent_api_nokkel()
+if _api_nokkel:
+    os.environ["ANTHROPIC_API_KEY"] = _api_nokkel
 
 from klassifiser import klassifiser
 
@@ -73,6 +89,24 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# Varsel om konfidensialitet: dokumentene sendes til Claude (Anthropic) via API.
+st.markdown(
+    "<div style='background:#FBF2E4; border:1px solid #E8D5B0; border-radius:10px; "
+    "padding:12px 18px; margin:8px 0 20px 0; color:#26302A; font-size:14px;'>"
+    "<strong>Ikke last opp konfidensielle dokumenter.</strong> "
+    "Dokumentene sendes til Claude (Anthropic) via API for å bli klassifisert. "
+    "Bruk prøvedokumentene under, eller egne dokumenter uten sensitivt innhold."
+    "</div>",
+    unsafe_allow_html=True,
+)
+
+if not _api_nokkel:
+    st.error(
+        "API-nøkkel mangler. Legg inn ANTHROPIC_API_KEY under Secrets i Streamlit "
+        "(eller som miljøvariabel når appen kjøres lokalt)."
+    )
+    st.stop()
+
 
 def _bygg_pdf_utdrag(leser, antall_sider):
     """Bygger en ny PDF med de første `antall_sider` sidene fra `leser`."""
@@ -136,15 +170,54 @@ def trekk_ut_innhold(fil):
     return {"type": "tekst", "verdi": ""}
 
 
-# ---------- Opplasting ----------
+# ---------- Prøvedokumenter ----------
+# Utvalg fra det norske testsettet, slik at man kan teste appen uten egne
+# dokumenter. Filene ligger i mappen eksempeldokumenter/ og kjøres gjennom
+# samme klassifisering som opplastede filer.
+EKSEMPEL_MAPPE = Path(__file__).parent / "eksempeldokumenter"
+
+
+@st.cache_data
+def les_eksempeldokumenter():
+    return [(f.name, f.read_bytes()) for f in sorted(EKSEMPEL_MAPPE.glob("*.pdf"))]
+
+
+class EksempelFil(io.BytesIO):
+    """Gir et prøvedokument samme grensesnitt (name, size, getvalue) som en
+    fil fra st.file_uploader, slik at resten av appen behandler dem likt."""
+
+    def __init__(self, navn, data):
+        super().__init__(data)
+        self.name = navn
+        self.size = len(data)
+
+
+def lag_eksempelfiler():
+    return [EksempelFil(navn, data) for navn, data in les_eksempeldokumenter()]
+
+
 # file_uploader husker filene sine basert på "key". For å kunne tømme hele
 # opplastingen med ett klikk (i stedet for å måtte trykke x på hver fil), gir
-# vi den en ny key hver gang "Fjern alle filer" trykkes — det tvinger
+# vi den en ny key hver gang opplastingen skal tømmes — det tvinger
 # Streamlit til å lage en helt ny, tom opplaster i stedet for å beholde de
 # gamle filene.
 if "opplastings_nokkel" not in st.session_state:
     st.session_state["opplastings_nokkel"] = 0
 
+
+def start_eksempler():
+    st.session_state["bruk_eksempler"] = True
+    st.session_state["opplastings_nokkel"] += 1  # tøm eventuelle egne opplastinger
+
+
+eksempler = les_eksempeldokumenter()
+if eksempler:
+    with st.container(border=True):
+        st.markdown("**Prøv med eksempeldokumenter**")
+        st.caption(f"{len(eksempler)} norske dokumenter fra testsettet, klassifisert uten at du laster opp noe selv.")
+        st.button("Kjør prøvedokumentene", on_click=start_eksempler, key="kjor_eksempler")
+
+# ---------- Opplasting ----------
 opplastede_filer = st.file_uploader(
     "Last opp dokumenter (PDF, TXT eller DOCX)",
     accept_multiple_files=True,
@@ -153,8 +226,14 @@ opplastede_filer = st.file_uploader(
 )
 
 if opplastede_filer:
+    st.session_state["bruk_eksempler"] = False  # egne filer har forrang
+elif st.session_state.get("bruk_eksempler"):
+    opplastede_filer = lag_eksempelfiler()
+
+if opplastede_filer:
     if st.button("Fjern alle filer"):
         st.session_state["opplastings_nokkel"] += 1
+        st.session_state["bruk_eksempler"] = False
         st.session_state.pop("klassifisering_signatur", None)
         st.session_state.pop("klassifisering_resultater", None)
         st.rerun()

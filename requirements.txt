@@ -1,6 +1,8 @@
-streamlit
+streamlit>=1.65.0
 anthropic
 pypdf
+cryptography
 python-docx
 pandas
 openpyxl
+jinja2

@@ -48,4 +48,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-export ANTHROPIC_API_KEY="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"

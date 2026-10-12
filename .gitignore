@@ -9,3 +9,6 @@ __pycache__/
 *.bak_*
 .agents/
 .claude/
+.env
+.venv*/
+.Rhistory
