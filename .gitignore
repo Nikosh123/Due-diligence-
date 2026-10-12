@@ -2,3 +2,10 @@ data/cuad/
 data/cuad_qa.parquet
 contracts.csv
 .DS_Store
+.streamlit/secrets.toml
+__pycache__/
+*.bak
+*.bak[0-9]
+*.bak_*
+.agents/
+.claude/

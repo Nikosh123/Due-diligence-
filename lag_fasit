@@ -1,0 +1,68 @@
+import pandas as pd
+import re
+import unicodedata
+
+def finn_typefrase(filnavn: str):
+    if not filnavn.endswith(".txt"):
+        return None
+    navn = filnavn[:-4]
+    treff = list(re.finditer(r"[A-Za-z][A-Za-z\-\s]*?(Agreement|Contract)", navn, re.IGNORECASE))
+    if not treff:
+        return "UKJENT"
+    frase = treff[-1].group(0).strip()
+    ord_liste = frase.split()
+    frase = " ".join(ord_liste[-5:]).upper()
+    if " - " in frase:
+        frase = frase.split(" - ")[-1].strip()
+    frase = re.sub(r"^[A-Z]-", "", frase)
+    frase = re.sub(r"^[A-Z]\s(?=[A-Z]{2,})", "", frase)
+    frase = re.sub(r"^(TO|AND|THE|FOR)\s+", "", frase)
+    return frase.strip()
+
+IP_NOKKELORD = [
+    "TRADEMARK LICENSE", "CONTENT LICENSE", "SOFTWARE LICENSE", "INTELLECTUAL PROPERTY",
+    "LICENSE AND HOSTING", "LICENCE AND MAINTENANCE", "LICENSE AGREEMENT", "LICENCE AGREEMENT",
+]
+REGULATORISK_NOKKELORD = ["JOINT FILING"]
+
+MANUELLE_UNNTAK = {
+    "MSCIINC_02_28_2008-EX-10.10-.txt": "Immaterielle rettigheter",
+    "VIRGINGALACTICHOLDINGS,INC_04_08_2020-EX-99.1-JOINT FILING STATEMENT.txt": "Regulatorisk/compliance",
+}
+
+def kategoriser_cuad(filnavn: str):
+    if filnavn in MANUELLE_UNNTAK:
+        return MANUELLE_UNNTAK[filnavn]
+    type_frase = finn_typefrase(filnavn)
+    if type_frase is None:
+        return None  # norsk dokument, fylles fra Excel-fasiten under
+    if type_frase == "UKJENT":
+        return "MÅ SJEKKES MANUELT"
+    for kw in IP_NOKKELORD:
+        if kw in type_frase:
+            return "Immaterielle rettigheter"
+    for kw in REGULATORISK_NOKKELORD:
+        if kw in type_frase:
+            return "Regulatorisk/compliance"
+    return "Kommersielle avtaler"
+
+def nfc(s):
+    return unicodedata.normalize("NFC", s) if isinstance(s, str) else s
+
+# Hoveddatasettet — CUAD-fasiten fra filnavn
+df = pd.read_csv("contracts_delt.csv")
+df["fasit_kategori"] = df["filnavn"].apply(kategoriser_cuad)
+
+# Den norske fasiten fra Excel-arket
+excel_fasit = pd.read_excel("Norsk DD test.xlsx", header=2)[["Filnavn", "Kategori"]].dropna(subset=["Filnavn"])
+oppslag = {nfc(f): k for f, k in zip(excel_fasit["Filnavn"], excel_fasit["Kategori"])}
+
+def fyll_norsk(rad):
+    if pd.notna(rad["fasit_kategori"]):
+        return rad["fasit_kategori"]
+    return oppslag.get(nfc(rad["filnavn"]), "MANGLER I EXCEL-FASIT")
+
+df["fasit_kategori"] = df.apply(fyll_norsk, axis=1)
+
+df.to_csv("contracts_delt.csv", index=False)
+print(df["fasit_kategori"].value_counts(dropna=False))
